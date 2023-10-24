@@ -5,14 +5,17 @@
 package main
 
 import (
-	"io/ioutil"
-	"log"
-	"os"
-	"strconv"
-
+	"fmt"
 	"github.com/hyperledger/fabric-chaincode-go/shim"
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 	"github.com/hyperledger/fabric-contract-api-go/metadata"
+	"github.com/msalimbene/hlp-721/etcdv3"
+	"io/ioutil"
+	"log"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 )
 
 type serverConfig struct {
@@ -37,10 +40,48 @@ func main() {
 		panic("Could not create chaincode from TokenERC721Contract." + err.Error())
 	}
 
+	etcdAddress := os.Getenv("ETCDADDRESS")
+	podIp := os.Getenv("POD_IP")
+	podPort := os.Getenv("POD_PORT")
+	chaincodeAdress := podIp + podPort
+
 	config := serverConfig{
 		CCID:    os.Getenv("CHAINCODE_ID"),
-		Address: os.Getenv("CHAINCODE_SERVER_ADDRESS"),
+		Address: chaincodeAdress,
 	}
+
+	// 定义 etcd 地址
+	var etcdEndpoints = []string{
+		etcdAddress,
+	}
+	// 把服务注册到 etcd
+	etcdServ, err := etcdv3.NewServiceRegister(
+		etcdEndpoints,
+		os.Getenv("CHAINCODE_CCID")+"+"+chaincodeAdress,
+		chaincodeAdress,
+		5)
+
+	if err != nil {
+		log.Fatalf("服务注册出错: %v", err)
+	}
+	defer etcdServ.Close()
+
+	c := make(chan os.Signal)
+	// 监听信号
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	go func() {
+		for s := range c {
+			switch s {
+			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM:
+				fmt.Println("退出:", s)
+				etcdServ.Close()
+				os.Exit(0)
+			default:
+				fmt.Println("其他信号:", s)
+			}
+		}
+	}()
 
 	server := &shim.ChaincodeServer{
 		CCID:     config.CCID,
