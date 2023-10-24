@@ -1,0 +1,17 @@
+# 数据存储卷
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: etcd-pv
+  namespace: etcd
+spec:
+  capacity:
+    storage: 2Gi   # 和etcd容器匹配
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: etcd-pv   # 持久卷匹配
+  hostPath:
+    path: /var/hyperledger/etcd

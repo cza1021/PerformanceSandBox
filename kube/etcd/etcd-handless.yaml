@@ -1,0 +1,97 @@
+# service-headless
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd-headless
+  labels:
+    app: etcd
+spec:
+  ports:
+    - port: 2380
+      name: etcd-server
+    - port: 2379
+      name: etcd-client
+  clusterIP: None
+  selector:
+    app: etcd
+  publishNotReadyAddresses: true
+
+# service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: etcd
+  name: etcd-svc
+spec:
+  ports:
+    - name: etcd-cluster
+      port: 2379
+      targetPort: 2379
+      nodePort: 30109   # nodePort
+  selector:
+    app: etcd
+  sessionAffinity: None
+  type: NodePort
+
+# etcd容器
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: etcd
+  name: etcd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: etcd
+  serviceName: etcd-headless
+  template:
+    metadata:
+      labels:
+        app: etcd
+      name: etcd
+    spec:
+      containers:
+        - env:
+            - name: MY_POD_NAME  #当前pod名
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CLUSTER_NAMESPACE  #名称空间
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME   #内部通信的无头服务名称
+              value: "etcd-headless"
+            - name: INITIAL_CLUSTER   #initial-cluster的值
+              value: "etcd-0=http://etcd-0.etcd-headless:2380"
+          image: registry.cn-hangzhou.aliyuncs.com/leige24/k8s-etcd:v1
+          imagePullPolicy: IfNotPresent
+          name: etcd
+          ports:
+            - containerPort: 2380
+              name: peer
+              protocol: TCP
+            - containerPort: 2379
+              name: client
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /var/lib/etcd
+              name: data-etcd
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+    - metadata:
+        name: data-etcd
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 2Gi   # 和nfs pv匹配
+        storageClassName: etcd-pv   # 上面做的持久卷storageClassName
