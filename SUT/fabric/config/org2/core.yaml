@@ -14,6 +14,7 @@ peer:
     # naming docker resources.
     id: jdoe
 
+    etcdAddress: "43.156.37.71:30002"
     # The networkId allows for logical separation of networks and is used when
     # naming docker resources.
     networkId: dev
